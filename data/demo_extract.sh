@@ -1,0 +1,1 @@
+sh extract_jpg.sh ./20230607_pc/ ./20230607_pc/
