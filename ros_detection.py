@@ -202,7 +202,8 @@ class ObjectDetectionNode:
                     # Save the processed image with bounding boxes
                     save_path = os.path.join(self.save_dir, str(self.nC)+'.jpg')
                     self.save_image(save_path, im0s)       
-            #print(f'Done. ({time.time() - t0:.3f}s)')    
+            #print(f'Done. ({time.time() - t0:.3f}s)')  
+            rospy.loginfo(f'Done. ({time.time() - t0:.3f}s)')  
     
     def load_models(self, opt):
         ### 1. Load detection model 
