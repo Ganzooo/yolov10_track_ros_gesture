@@ -65,9 +65,9 @@ def load_models(opt):
     if opt.trackTP:
         # Initialize the tracker
         tracker = BoTSORT(
-            reid_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
+            model_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
             device = 'cuda:0',
-            half = False,
+            fp16 = False,
         )
 
     else: 
@@ -369,7 +369,7 @@ if __name__ == '__main__':
     folder_test = True
     if folder_test == True:
         #src_folder = '/dataset2/dataset2/59_Traffic_Police_Hand_Pattern_Image/01_Data/2_Validation/val_hand'
-        src_folder = '/dataset/Gist/Static_test_growth_g/'
+        src_folder = '/media/tt/data/dataset/Static_test_growth_g/'
         # Loop through all subfolders in the source folder
         for folder in os.listdir(src_folder):
             folder_path = os.path.join(src_folder, folder)

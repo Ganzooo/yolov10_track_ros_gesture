@@ -157,7 +157,12 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
             cv2.line(img, data_deque[id][i - 1], data_deque[id][i], color, thickness)
     return img
 
-def plot_tracked_tp_at_img(names, tracked_TP, actionTP, img, im0s, colors):
+def plot_tracked_tp_at_img(names, tracked_TP, actionTP, img, im0s, colors, cls_number):
+    if cls_number == 6:
+        action_labels = ['Right_to_Left', 'Left_to_Right', 'Front_Stop', 'Rear_Stop','Left_and_Right_Stop', 'Front_and_Rear_Stop']
+    else:
+        action_labels = ['Go', 'No_signal', 'Slow', 'Stop_front','Stop_side', 'Turn_left', 'Turn_right']
+
     label = f'{names[int(tracked_TP[-1][:,-3])]}:{str(int(tracked_TP[-1][:,-2]))}' + '\n' + 'Action: ' + f'{action_labels[actionTP[0]]}'
     
     _scaled_bbox_xyxy = scale_boxes(img.shape[2:], torch.from_numpy(tracked_TP[-1][:,:4].astype('float32')), im0s.shape).round()
