@@ -136,3 +136,5 @@ data/TP/*
 data/TP2/*
 data/TP3_hand/*
 Demo_Video/*
+data/weight/*
+*.pt
