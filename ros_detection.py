@@ -73,17 +73,24 @@ class ObjectDetectionNode:
         self.colors[8] = (255,0,255)
           
     def image_callback(self, msg):
+        self.nC = self.nC + 1
+        
+        if self.nC % 2 == 0:
+            self.YOLO_detection = True 
+        else: 
+            self.YOLO_detection = False 
+            
         if self.YOLO_detection:
             t0 = time.time()
             
             np_arr = np.frombuffer(msg.data, np.uint8)  # Decode from byte array
             im0s = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)  # Decode to OpenCV format
+            im0s = cv2.cvtColor(im0s, cv2.COLOR_BGR2RGB)
             
             # Padded resize
             im0s_padd = letterbox(im0s, opt.img_size, stride=32)[0]
 
             if im0s_padd.size != 0:
-                self.nC = self.nC + 1
                 # Preprocess Image
                 _img = torch.from_numpy(im0s_padd).to(self.device)
                 
@@ -100,7 +107,7 @@ class ObjectDetectionNode:
                 # Apply Classifier
                 if self.opt.classifyEC:
                     if len(pred):
-                        pred = self.apply_classifier(pred, self.modelEC, img, im0s, opt.half, self.names, self.det_cls_number)
+                        pred = apply_classifier(pred, self.modelEC, img, im0s, self.names, self.device)
 
                 if self.opt.trackTP: ### Tracker only perform Traffic Police class
                     if len(pred):
@@ -139,7 +146,7 @@ class ObjectDetectionNode:
                                 
                                 #Emergency Car tracked ID check
                                 elif objecCLASS > self.opt.tpClassNumber:
-                                    self.tracked_EC.append(output)
+                                    self.tracked_EC.append(np.expand_dims(output,axis=0))
                             
                         #No tracked data null -> tracked memory
                         #TDB: Add logic to check when null the memory
@@ -182,11 +189,26 @@ class ObjectDetectionNode:
                         self.tracked_TP_bbox.pop(0)
                         if self.opt.keyPointDet:
                             self.tracked_TP_keypoint.pop(0)
+                    
+                    # Plot EC tracked bbox
+                    elif len(self.tracked_EC) > 0: 
+                        if self.opt.save_img >= 1:
+                            plot_tracked_ec_at_img(self.names, self.tracked_EC, img, im0s, self.colors)
+                            
+                        #Send result data to SERVER
+                        #Emergency car data
+                        if self.opt.send_result_server:
+                            self.send_server_result_data(self.tracked_TP[0])
+                        
+                        # Remove first frame from MEMORY
+                        self.tracked_EC.pop(0)
+                        
+                    # Plot All bbox
                     else: 
-                        if self.opt.save_img >= 1 and len(pred):
+                        if self.opt.save_img >= 2 and len(pred):
                             plot_all_boxes_at_img(pred, img, im0s, self.names, self.colors)
                 else:
-                    if self.opt.save_img >= 1 and len(pred):
+                    if self.opt.save_img >= 2 and len(pred):
                         plot_all_boxes_at_img(pred, img, im0s, self.names, self.colors)
                         
                 #t5 = time_synchronized()
@@ -267,14 +289,22 @@ class ObjectDetectionNode:
         ### 5. Load Emergency Car classification model 
         # resnet34
         if opt.classifyEC:
-            emergency_car_class = 5
+            emergency_car_class = 6
             modelEC = resnet34(pretrained=False, num_classes=emergency_car_class).to('cuda')
             checkpointEC = torch.load(opt.ec_weights, map_location='cuda')
             modelEC.load_state_dict(checkpointEC)
             modelEC.eval()
             if opt.half:
                 modelEC.half()
-            names = names + ['Ambulance','Fire_Truck','Police_Car', 'EC_Other']
+            
+            #ec_names = ['Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other']
+            #names = names + ['Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other']
+            names[9], names[10], names[11], names[12], names[13] = 'Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other'
+            #ec_cls_num = len(names)
+            #for i in range(ec_cls_num):
+            #    names[det_cls_number+i].append(ec_names[i])
+                
+            #names.append(['Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other'])
             colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
         else: 
             modelEC = None
@@ -309,30 +339,31 @@ class ObjectDetectionNode:
 
     def save_image(self, file_path, image):
         #file_path = "./runs/ros_result/ros_detected_image.jpg"
-        cv2.imwrite(file_path, image)
+        
+        cv2.imwrite(file_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
         rospy.loginfo(f"Image saved at {file_path}")
 
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     #parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/yolov7_x_keti_tp_best_231101.pt', help='model.pt path(s)')
-    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_tp_0_885_240924.pt', help='model.pt path(s)')
-    parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/best_epoch_resnet34_ec_221016.pt', help='model.pt path(s)')
-    #parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_image_wand_best_gist.pth', help='model.pt path(s)')
-    #parser.add_argument('--acr-class', type=int, default=7, help='Action class number, Wand: 7, Hand: 6')
-    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_hand_ResNetAttentionVisual_image_best.pth', help='model.pt path(s)')
-    parser.add_argument('--acr-class', type=int, default=6, help='Action class number, Wand: 7, Hand: 6')
+    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_ec_tp_0_89_241106.pt', help='model.pt path(s)')
+    parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241106_Class5.pt', help='model.pt path(s)')
+    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_image_wand_best_gist.pth', help='model.pt path(s)')
+    parser.add_argument('--acr-class', type=int, default=7, help='Action class number, Wand: 7, Hand: 6')
+    #parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_hand_ResNetAttentionVisual_image_best.pth', help='model.pt path(s)')
+    #parser.add_argument('--acr-class', type=int, default=6, help='Action class number, Wand: 7, Hand: 6')
     
     parser.add_argument('--source', type=str, default='./data/TP2/13292_43/', help='source')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
+    parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
+    parser.add_argument('--conf-thres', type=float, default=0.8, help='object confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
-    parser.add_argument('--save_img', type=int, default=2, help='save image level 0: no save, 1: save result img, 2: save each bbox img')
+    parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
@@ -349,7 +380,7 @@ if __name__ == '__main__':
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
     parser.add_argument('--keyPointDet', type=bool, default=False, help='Key Point Detection model: True/False')
     parser.add_argument('--bTH', type=int, default=0, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
-    parser.add_argument('--classifyEC', type=bool, default=False, help='Classification Emergency Car model: True/False')
+    parser.add_argument('--classifyEC', type=bool, default=True, help='Classification Emergency Car model: True/False')
     parser.add_argument('--trackTP', type=bool, default=True, help='Track traffic police: True/False')
     parser.add_argument('--half', type=bool, default=False, help='Track traffic police: True/False')
     parser.add_argument('--action-img-size', type=int, default=224, help='action recognization inference size (pixels)')
