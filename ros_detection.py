@@ -55,12 +55,14 @@ url = 'http://127.0.0.1:5000/api/bbox'
 
 class ObjectDetectionNode:
     def __init__(self, opt):
-        # Initialize the YOLO model (you can replace with your custom model)
-        #self.model = YOLO("yolov8m.pt")  # Pre-trained YOLOv8 model
         self.bridge = CvBridge()
         print('Init Object Detection Node\n')
     
         self.image_sub = rospy.Subscriber(name = "/camera/image_raw/compressed", data_class = CompressedImage, callback = self.image_callback, queue_size=10)
+        
+        self.img_result_pub = True
+        if self.img_result_pub == True:
+            self.image_pub = rospy.Publisher("/camera/image_detected/image", Image, queue_size=10)
         
         self.YOLO_detection = True 
         
@@ -182,7 +184,7 @@ class ObjectDetectionNode:
                                 x = _boxImg
                             actionTP = self.modelRecTP(x, label=None)
                             actionTP = torch.argmax(actionTP, dim=-1).cpu().numpy()
-                        print('\nAction',actionTP)
+                        #print('\nAction',actionTP)
                         
                         if self.opt.save_img >= 1:
                             plot_tracked_tp_at_img(self.names, self.tracked_TP, actionTP, img, im0s, self.colors, opt.acr_class)
@@ -190,7 +192,7 @@ class ObjectDetectionNode:
                         #Send result data to SERVER
                         #Traffic police data
                         if self.opt.send_result_server:
-                            self.send_server_result_data(self.tracked_TP[0], data_type='TP')
+                            self.send_server_result_data(self.tracked_TP[-1], data_type='TP', pred_type=actionTP)
                         
                         # Remove first frame from MEMORY
                         self.tracked_TP.pop(0)
@@ -219,8 +221,15 @@ class ObjectDetectionNode:
                     if self.opt.save_img >= 2 and len(pred):
                         plot_all_boxes_at_img(pred, img, im0s, self.names, self.colors)
                         
-                            
-                if self.opt.save_img >= 1:
+                
+                if self.img_result_pub == True:
+                    # Convert OpenCV image back to ROS Image message
+                    _img = cv2.cvtColor(im0s, cv2.COLOR_RGB2BGR)
+                    detected_img_msg = self.bridge.cv2_to_imgmsg(_img)
+                    # Publish the annotated image
+                    self.image_pub.publish(detected_img_msg)
+                    
+                if self.opt.save_img >= 1 and not self.img_result_pub:
                     # Save the processed image with bounding boxes
                     save_path = os.path.join(self.save_dir, str(self.nC)+'.jpg')
                     self.save_image(save_path, im0s)       
@@ -334,11 +343,11 @@ class ObjectDetectionNode:
         return []
     
     
-    def send_server_result_data(self, data, data_type='EC'):
+    def send_server_result_data(self, data, data_type='EC', pred_type=0):
         
-        jdata = convert_data_json_format(data, data_type)
+        json_data = convert_data_json_format(data, data_type, pred_type)
         # Convert Python dictionary to JSON string with custom datetime handling
-        json_data = json.dumps(jdata)
+        #json_data = json.dumps(jdata)
 
         # Set headers for JSON content
         headers = {
@@ -373,7 +382,7 @@ jdata = {
         }
     }
     
-def convert_data_json_format(data, data_type):
+def convert_data_json_format(data, data_type, pred_type):
     # Load the JSON data into a Python dictionary
     #jdata = json.loads(json_template)
 
@@ -381,6 +390,9 @@ def convert_data_json_format(data, data_type):
         # Get the number of emergency vehicles from the JSON data
         num_of_em_vehicles = len(data[0])
 
+        if num_of_em_vehicles > 1:
+            pass
+        
         # Dynamically generate em_vehicles data based on num_of_em_vehicles
         for i in range(num_of_em_vehicles):
             new_vehicle = {
@@ -398,11 +410,11 @@ def convert_data_json_format(data, data_type):
     elif data_type == 'TP':
         # Modify values inside the 'hand_signal' object
         jdata['hand_signal']['type'] = 0
-        jdata['hand_signal']['direction'] = data[0][0][5]
-        jdata['hand_signal']['position']['u'] = round(data[0][0][0],2)
-        jdata['hand_signal']['position']['v'] = round(data[0][0][1],2)
-        jdata['hand_signal']['height'] = round(data[0][0][2]-data[0][0][0],2)
-        jdata['hand_signal']['width'] = round(data[0][0][3]-data[0][0][1],2)
+        jdata['hand_signal']['direction'] = int(pred_type)
+        jdata['hand_signal']['position']['u'] = round(data[0][0],2)
+        jdata['hand_signal']['position']['v'] = round(data[0][1],2)
+        jdata['hand_signal']['height'] = round(data[0][2]-data[0][0],2)
+        jdata['hand_signal']['width'] = round(data[0][3]-data[0][1],2)
     else: 
         print('Need to choose proper data type!!!!')
 
@@ -426,7 +438,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--source', type=str, default='./data/TP2/13292_43/', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.8, help='object confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
