@@ -45,6 +45,14 @@ from torchvision import transforms
 from boxmot import BoTSORT
 from ultralytics import YOLOv10
 
+#Server RESTApi
+import requests
+import json
+from datetime import datetime
+
+#Server URL
+url = 'http://127.0.0.1:5000/api/bbox'
+
 class ObjectDetectionNode:
     def __init__(self, opt):
         # Initialize the YOLO model (you can replace with your custom model)
@@ -182,7 +190,7 @@ class ObjectDetectionNode:
                         #Send result data to SERVER
                         #Traffic police data
                         if self.opt.send_result_server:
-                            self.send_server_result_data(self.tracked_TP[0])
+                            self.send_server_result_data(self.tracked_TP[0], data_type='TP')
                         
                         # Remove first frame from MEMORY
                         self.tracked_TP.pop(0)
@@ -198,10 +206,10 @@ class ObjectDetectionNode:
                         #Send result data to SERVER
                         #Emergency car data
                         if self.opt.send_result_server:
-                            self.send_server_result_data(self.tracked_TP[0])
+                            self.send_server_result_data(self.tracked_EC, data_type='EC')
                         
                         # Remove first frame from MEMORY
-                        self.tracked_EC.pop(0)
+                        self.tracked_EC = []
                         
                     # Plot All bbox
                     else: 
@@ -211,14 +219,6 @@ class ObjectDetectionNode:
                     if self.opt.save_img >= 2 and len(pred):
                         plot_all_boxes_at_img(pred, img, im0s, self.names, self.colors)
                         
-                #t5 = time_synchronized()
-                #print(f'{save_path}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t3a - t3)):.1f}ms) Pre-Track, \
-                #      ({(1E3 * (t4 - t3a)):.1f}ms) Track, ({(1E3 * (t4a - t4)):.1f}ms) AcRecPre, ({(1E3 * (t5 - t4a)):.1f}ms) AcRec, ({(1E3 * (t5 - t0a)):.1f}ms) All-time')
-                    
-                #Send result data to SERVER
-                #Emergency car data
-                    if self.opt.send_result_server:
-                        self.send_server_result_data(self.tracked_EC)
                             
                 if self.opt.save_img >= 1:
                     # Save the processed image with bounding boxes
@@ -334,8 +334,23 @@ class ObjectDetectionNode:
         return []
     
     
-    def send_server_result_data(self, data):
-        pass 
+    def send_server_result_data(self, data, data_type='EC'):
+        
+        jdata = convert_data_json_format(data, data_type)
+        # Convert Python dictionary to JSON string with custom datetime handling
+        json_data = json.dumps(jdata)
+
+        # Set headers for JSON content
+        headers = {
+            'Content-Type': 'application/json'
+        }
+
+        # Send POST request with serialized JSON data
+        response = requests.post(url, data=json_data, headers=headers)
+
+        # Print response status and content from the server
+        print(f"Status Code: {response.status_code}")
+        print(f"Response Content: {response.text}")
 
     def save_image(self, file_path, image):
         #file_path = "./runs/ros_result/ros_detected_image.jpg"
@@ -343,6 +358,61 @@ class ObjectDetectionNode:
         cv2.imwrite(file_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
         rospy.loginfo(f"Image saved at {file_path}")
 
+# Sample JSON data
+jdata = {
+        "time_stamp": 0,
+        "msg_count": 42,
+        "num_of_em_vehicles": 0,
+        "em_vehicles": [],
+        "hand_signal": {
+            "type": 0,
+            "direction": 0,
+            "position": {"u": 0, "v": 0},
+            "height": 0,
+            "width": 0
+        }
+    }
+    
+def convert_data_json_format(data, data_type):
+    # Load the JSON data into a Python dictionary
+    #jdata = json.loads(json_template)
+
+    if data_type == 'EC':
+        # Get the number of emergency vehicles from the JSON data
+        num_of_em_vehicles = len(data[0])
+
+        # Dynamically generate em_vehicles data based on num_of_em_vehicles
+        for i in range(num_of_em_vehicles):
+            new_vehicle = {
+                'type': data[0][i][5],  # Assign a unique type for each vehicle (you can customize this)
+                'position': {
+                    'u': round(data[0][i][0],2),  # Example dynamic u position
+                    'v': round(data[0][i][1],2)   # Example dynamic v position
+                },
+                'height': round(data[0][i][2]-data[0][i][0],2),   # Example dynamic height
+                'width': round(data[0][i][3]-data[0][i][1],2)     # Example dynamic width
+            }
+            
+            # Append each new vehicle to the em_vehicles list
+            jdata['em_vehicles'].append(new_vehicle)
+    elif data_type == 'TP':
+        # Modify values inside the 'hand_signal' object
+        jdata['hand_signal']['type'] = 0
+        jdata['hand_signal']['direction'] = data[0][0][5]
+        jdata['hand_signal']['position']['u'] = round(data[0][0][0],2)
+        jdata['hand_signal']['position']['v'] = round(data[0][0][1],2)
+        jdata['hand_signal']['height'] = round(data[0][0][2]-data[0][0][0],2)
+        jdata['hand_signal']['width'] = round(data[0][0][3]-data[0][0][1],2)
+    else: 
+        print('Need to choose proper data type!!!!')
+
+    jdata['time_stamp'] = str(datetime.now())
+    jdata['msg_count'] = len(jdata)
+    
+    # Convert the updated dictionary back to a JSON string (for output or further use)
+    updated_json = json.dumps(jdata, indent=4)
+    return updated_json
+    
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
@@ -385,7 +455,7 @@ if __name__ == '__main__':
     parser.add_argument('--half', type=bool, default=False, help='Track traffic police: True/False')
     parser.add_argument('--action-img-size', type=int, default=224, help='action recognization inference size (pixels)')
     parser.add_argument('--tpTRACK_ID', type=int, default=1, help='traffic police track id DEFAULT:1 -> it is update from tracker')
-    parser.add_argument('--send_result_server', type=bool, default=False, help='Send Result to SERVER')
+    parser.add_argument('--send_result_server', type=bool, default=True, help='Send Result to SERVER')
     
     opt = parser.parse_args()
     print(opt)
