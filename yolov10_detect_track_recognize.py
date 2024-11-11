@@ -114,7 +114,8 @@ def load_models(opt):
         if opt.half:
             modelEC.half()
 
-        names = names + ['Ambulance','Fire_Truck','Police_Car', 'EC_Other']
+        #names = names + ['Ambulance','Fire_Truck','Police_Car', 'EC_Other']
+        names = names + ['Police_Car','Fire_Truck','Ambulance','Fire_Other']
         colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
     else: 
         modelEC = None

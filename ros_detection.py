@@ -298,7 +298,7 @@ class ObjectDetectionNode:
         ### 5. Load Emergency Car classification model 
         # resnet34
         if opt.classifyEC:
-            emergency_car_class = 6
+            emergency_car_class = 5
             modelEC = resnet34(pretrained=False, num_classes=emergency_car_class).to('cuda')
             checkpointEC = torch.load(opt.ec_weights, map_location='cuda')
             modelEC.load_state_dict(checkpointEC)
@@ -308,7 +308,8 @@ class ObjectDetectionNode:
             
             #ec_names = ['Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other']
             #names = names + ['Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other']
-            names[9], names[10], names[11], names[12], names[13] = 'Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other'
+            #names[9], names[10], names[11], names[12], names[13] = 'Ambulance','Fire_Truck','Fire_Other','Police_Car','Police_Other'
+            names[9], names[10], names[11], names[12] = 'Police_Car','Fire_Truck','Ambulance','Fire_Other'
             #ec_cls_num = len(names)
             #for i in range(ec_cls_num):
             #    names[det_cls_number+i].append(ec_names[i])
@@ -429,8 +430,8 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     #parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/yolov7_x_keti_tp_best_231101.pt', help='model.pt path(s)')
-    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_ec_tp_0_89_241106.pt', help='model.pt path(s)')
-    parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241106_Class5.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_ec_tp_0_92_241107.pt', help='model.pt path(s)')
+    parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241107_Class4.pt', help='model.pt path(s)')
     parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_image_wand_best_gist.pth', help='model.pt path(s)')
     parser.add_argument('--acr-class', type=int, default=7, help='Action class number, Wand: 7, Hand: 6')
     #parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_hand_ResNetAttentionVisual_image_best.pth', help='model.pt path(s)')
@@ -438,14 +439,14 @@ if __name__ == '__main__':
     
     parser.add_argument('--source', type=str, default='./data/TP2/13292_43/', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.45, help='object confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.85, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
-    parser.add_argument('--save_img', type=int, default=2, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
+    parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
