@@ -1,0 +1,6 @@
+torch>=2.0.1
+torchvision>=0.15.2
+opencv-python>=4.9.0.80
+boxmot==10.0.78
+huggingface-hub==0.26.2
+flask==3.0.3
