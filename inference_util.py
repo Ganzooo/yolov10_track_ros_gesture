@@ -161,7 +161,7 @@ def plot_tracked_tp_at_img(names, tracked_TP, actionTP, img, im0s, colors, cls_n
     if cls_number == 6:
         action_labels = ['Right_to_Left', 'Left_to_Right', 'Front_Stop', 'Rear_Stop','Left_and_Right_Stop', 'Front_and_Rear_Stop']
     else:
-        action_labels = ['Go', 'No_signal', 'Slow', 'Stop_front','Stop_side', 'Turn_left', 'Turn_right']
+        action_labels = ['No_signal_hand','Right_to_Left', 'Left_to_Right', 'Front_Stop', 'Rear_Stop','Left_and_Right_Stop', 'Front_and_Rear_Stop','Go', 'Turn_left', 'Turn_right', 'Stop_front','Stop_side', 'No_signal', 'Slow']
 
     label = f'{names[int(tracked_TP[-1][:,-3])]}:{str(int(tracked_TP[-1][:,-2]))}' + '\n' + 'Action: ' + f'{action_labels[actionTP[0]]}'
     

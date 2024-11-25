@@ -42,7 +42,7 @@ from torchvision import transforms
 
 
 
-from boxmot import BoTSORT
+from boxmot import BoTSORT, StrongSORT, DeepOCSORT
 from ultralytics import YOLOv10
 
 #Server RESTApi
@@ -74,6 +74,8 @@ class ObjectDetectionNode:
             
         self.tracked_TP, self.tracked_TP_bbox, self.tracked_TP_keypoint, self.tracked_TP_keypointDebug, self.tracked_EC = [], [], [], [], []
         self.nC = 0
+        self.no_tracked_tp = 0
+        self.buffer_lifetime = 20 #without pred buffer stays with 20 frame
         
         # Directories
         self.save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
@@ -157,13 +159,17 @@ class ObjectDetectionNode:
                                 #Emergency Car tracked ID check
                                 elif objecCLASS > self.opt.tpClassNumber:
                                     self.tracked_EC.append(np.expand_dims(output,axis=0))
-                            
+                     
                         #No tracked data null -> tracked memory
                         #TDB: Add logic to check when null the memory
                         else: 
-                            self.tracked_TP = []
-                            self.tracked_TP_bbox = []
-                            self.tracked_EC = []
+                            self.no_tracked_tp = self.no_tracked_tp + 1
+                            
+                            ### Buffer stays 10 fram without TP, EC detection
+                            if self.no_tracked_tp > self.buffer_lifetime:
+                                self.tracked_TP = []
+                                self.tracked_TP_bbox = []
+                                self.tracked_EC = []
                     
                     #t4 = time_synchronized()
                     #t4a = time_synchronized()
@@ -257,11 +263,28 @@ class ObjectDetectionNode:
         # Deep sort 
         if opt.trackTP:
             # Initialize the tracker
-            tracker = BoTSORT(
+            # tracker = BoTSORT(
+            #     model_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
+            #     device = 'cuda:0',
+            #     fp16 = False,
+            # )
+            
+            # Initialize the StrongSORT tracker
+            # tracker = StrongSORT(
+            #     model_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
+            #     device = 'cuda:0',
+            #     fp16 = False,
+            # )
+            
+            tracker = DeepOCSORT(
                 model_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
                 device = 'cuda:0',
                 fp16 = False,
+                asso_func="centroid",
+                iou_threshold=0.3  # use this to set the centroid threshold that match your use-case best
             )
+            
+            
 
         else: 
             tracker = None
@@ -333,13 +356,16 @@ class ObjectDetectionNode:
         pred = np.array(pred)
         return pred
         
-    def handle_tracking(self, tracker, pred, names, im0s, img, opt):
-        track_pred = pred[pred[:,5]>=7]
+    def handle_tracking(self, tracker, track_pred, names, im0s, img, opt):
+        #track_pred = track_pred[track_pred[:,5]>=7]
         if len(track_pred) > 0:
             outputs = tracker.update(track_pred, im0s)
             if len(outputs):
                 outputs[:, [4, 6]] = outputs[:, [6, 4]]
                 outputs[:, [4, 5]] = outputs[:, [5, 4]]
+                
+                ### Send only TP, EC tracked value
+                outputs = outputs[outputs[:,5]>=7]
                 return outputs
         return []
     
@@ -355,12 +381,15 @@ class ObjectDetectionNode:
             'Content-Type': 'application/json'
         }
 
-        # Send POST request with serialized JSON data
-        response = requests.post(url, data=json_data, headers=headers)
+        try:
+            # Send POST request with serialized JSON data
+            response = requests.post(url, data=json_data, headers=headers)
 
-        # Print response status and content from the server
-        print(f"Status Code: {response.status_code}")
-        print(f"Response Content: {response.text}")
+            # Print response status and content from the server
+            print(f"Status Code: {response.status_code}")
+            print(f"Response Content: {response.text}")
+        except:
+            print("Failed to establish connection::: check your server IP")
 
     def save_image(self, file_path, image):
         #file_path = "./runs/ros_result/ros_detected_image.jpg"
@@ -385,9 +414,8 @@ jdata = {
     
 def convert_data_json_format(data, data_type, pred_type):
     # Load the JSON data into a Python dictionary
-    #jdata = json.loads(json_template)
-
     if data_type == 'EC':
+        
         # Get the number of emergency vehicles from the JSON data
         num_of_em_vehicles = len(data[0])
 
@@ -430,30 +458,31 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     #parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/yolov7_x_keti_tp_best_231101.pt', help='model.pt path(s)')
-    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_ec_tp_0_92_241107.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_tp241120_0_90.pt', help='model.pt path(s)')
     parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241107_Class4.pt', help='model.pt path(s)')
-    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_image_wand_best_gist.pth', help='model.pt path(s)')
-    parser.add_argument('--acr-class', type=int, default=7, help='Action class number, Wand: 7, Hand: 6')
+    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_CLS14_hand_wand_0_92_241112.pth', help='model.pt path(s)')
+    parser.add_argument('--acr-class', type=int, default=15, help='Action class number, Wand: 7, Hand: 7')
     #parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_hand_ResNetAttentionVisual_image_best.pth', help='model.pt path(s)')
     #parser.add_argument('--acr-class', type=int, default=6, help='Action class number, Wand: 7, Hand: 6')
     
     parser.add_argument('--source', type=str, default='./data/TP2/13292_43/', help='source')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.85, help='object confidence threshold')
+    parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
+    parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
-    parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
+    parser.add_argument('--save_img', type=int, default=2, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--update', action='store_true', help='update all models')
     parser.add_argument('--project', default='runs/wand_gist', help='save results to project/name')
     parser.add_argument('--name', default='ros_result', help='save results to project/name')
-    parser.add_argument('--names', default='runs/detect', help='save results to project/name')
+    parser.add_argument('--names', default='runs/detect', help='save results tnvidia-oject/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
     parser.add_argument('--trailslen', type=int, default=64, help='trails size (new parameter)')
@@ -462,7 +491,7 @@ if __name__ == '__main__':
     parser.add_argument('--actionRec', type=bool, default=True, help='Action Recognization model: True/False')
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
     parser.add_argument('--keyPointDet', type=bool, default=False, help='Key Point Detection model: True/False')
-    parser.add_argument('--bTH', type=int, default=0, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
+    parser.add_argument('--bTH', type=int, default=10, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
     parser.add_argument('--classifyEC', type=bool, default=True, help='Classification Emergency Car model: True/False')
     parser.add_argument('--trackTP', type=bool, default=True, help='Track traffic police: True/False')
     parser.add_argument('--half', type=bool, default=False, help='Track traffic police: True/False')
