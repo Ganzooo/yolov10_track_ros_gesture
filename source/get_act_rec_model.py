@@ -12,10 +12,8 @@ class ActionBasicModule(nn.Module):
         self.classes = classes
         self.device = device
         self.model = net
-        #self.model.blocks[6].proj = nn.Linear(self.model.blocks[6].proj.in_features, self.classes, bias=True)
         self.model = self.model.to(self.device)
-        
-
+    
     def forward(self, x, label=None, loss_mode="smoothin", smoothing=0.0):
         x = self.model(x)
         if label is not None:

@@ -166,7 +166,7 @@ def plot_tracked_tp_at_img(names, tracked_TP, actionTP, img, im0s, colors, cls_n
     label = f'{names[int(tracked_TP[-1][:,-3])]}:{str(int(tracked_TP[-1][:,-2]))}' + '\n' + 'Action: ' + f'{action_labels[actionTP[0]]}'
     
     _scaled_bbox_xyxy = scale_boxes(img.shape[2:], torch.from_numpy(tracked_TP[-1][:,:4].astype('float32')), im0s.shape).round()
-    plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_TP[-1][:,-1])], line_thickness=5)
+    plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_TP[-1][:,-3])], line_thickness=5)
     
 def plot_tracked_ec_at_img(names, tracked_EC, img, im0s, colors):
     label = f'{names[int(tracked_EC[-1][:,-3])]}:{str(int(tracked_EC[-1][:,-2]))}'
