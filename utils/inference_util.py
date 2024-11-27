@@ -169,11 +169,11 @@ def plot_tracked_tp_at_img(names, tracked_TP, actionTP, img, im0s, colors, cls_n
     plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_TP[-1][:,-3])], line_thickness=5)
     
 def plot_tracked_ec_at_img(names, tracked_EC, img, im0s, colors):
-    label = f'{names[int(tracked_EC[-1][:,-3])]}:{str(int(tracked_EC[-1][:,-2]))}'
-    
-    _scaled_bbox_xyxy = scale_boxes(img.shape[2:], torch.from_numpy(tracked_EC[-1][:,:4].astype('float32')), im0s.shape).round()
-    plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_EC[-1][:,-1])], line_thickness=5)
-
+    for i in range(len(tracked_EC)):
+        label = f'{names[int(tracked_EC[i][:,-3])]}:{str(int(tracked_EC[i][:,-2]))}'
+        _scaled_bbox_xyxy = scale_boxes(img.shape[2:], torch.from_numpy(tracked_EC[i][:,:4].astype('float32')), im0s.shape).round()
+        plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_EC[i][:,-3])], line_thickness=5)
+        
 def plot_all_boxes_at_img(pred, img, im0s, names, colors):
     try:
         pred[:, :4] = scale_boxes(img.shape[2:], pred[:, :4], im0s.shape).round()

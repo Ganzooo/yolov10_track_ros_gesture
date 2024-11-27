@@ -51,10 +51,15 @@ rviz
 ```
 
 ### Run Detection System
-You can run it at command line.
 
 ```
 python ./united_trafficpolice_emergency_case_datection.py
+```
+
+### Server API test 
+For proper server test you need to change server IP address at united_trafficpolice_emergency_case_datection.py file.
+```
+python ./server_side_flask_api.py.py
 ```
 
 ## Results

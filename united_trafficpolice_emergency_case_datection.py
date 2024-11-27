@@ -25,7 +25,7 @@ from source.get_act_rec_model import get_action_rec_model
 from torchvision.models import resnet34
 from torchvision import transforms
 
-from boxmot import StrongSORT
+from boxmot import StrongSORT, BoTSORT
 from ultralytics import YOLOv10
 
 #Server RESTApi
@@ -64,20 +64,22 @@ class ObjectDetectionNode:
         
         self.image_sub = rospy.Subscriber(name = "/camera/image_raw/compressed", data_class = CompressedImage, callback = self.image_callback, queue_size=10)
         
-        self.img_result_pub = True
+        self.img_result_pub = opt.img_result_pub
         if self.img_result_pub == True:
-            self.image_pub = rospy.Publisher("/camera/image_detected/image", Image, queue_size=1)
+            self.image_pub = rospy.Publisher("/camera/image_detected/image", Image, queue_size=10)
             
           
     def image_callback(self, msg):
         self.nC = self.nC + 1
         
         # Discard every 2(second) frame from ROS data
-        if self.nC % 2 == 0:
+        if self.nC % 1 == 0:
             self.YOLO_detection = True 
         else: 
             self.YOLO_detection = False 
             
+        self.tracked_EC = []
+        
         if self.YOLO_detection:
             t0 = time.time()
             
@@ -142,7 +144,9 @@ class ObjectDetectionNode:
                                 #Emergency Car tracked ID check
                                 elif objecCLASS > self.opt.tpClassNumber:
                                     self.tracked_EC.append(np.expand_dims(output,axis=0))
-                     
+
+                        #elif self.tracked_TP_bbox >= self.opt.num_frame_action_rec and 
+                        
                         #No tracked data null -> tracked memory
                         #TDB: Add logic to check when null the memory
                         else: 
@@ -241,8 +245,9 @@ class ObjectDetectionNode:
         # Deep sort 
         if opt.trackTP:
             # Initialize the StrongSORT tracker
-            tracker = StrongSORT(
-                model_weights = Path('./data/weight/tracker/osnet_x1_0_msmt17.pt'),  # which ReID model to use
+            tracker = BoTSORT(
+                #model_weights = Path('./data/weight/tracker/osnet_x1_0_msmt17.pt'),  # which ReID model to use
+                model_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
                 device = 'cuda:0',
                 fp16 = False,
             )
@@ -308,15 +313,18 @@ class ObjectDetectionNode:
         return pred
         
     def handle_tracking(self, tracker, track_pred, names, im0s, img, opt):
-        #track_pred = track_pred[track_pred[:,5]>=7]
+        ### Track only TP, EC 
+        track_pred = track_pred[track_pred[:,5]>=7]
         if len(track_pred) > 0:
             outputs = tracker.update(track_pred, im0s)
             if len(outputs):
                 outputs[:, [4, 6]] = outputs[:, [6, 4]]
                 outputs[:, [4, 5]] = outputs[:, [5, 4]]
                 
+                ### TDB: -> Track all classes and send only TP, EC 
+                ### slower inference speed x10
                 ### Send only TP, EC tracked value
-                outputs = outputs[outputs[:,5]>=(self.opt.tpClassNumber-1)]
+                ### outputs = outputs[outputs[:,5]>=(self.opt.tpClassNumber-1)]
                 return outputs
         return []
     
@@ -408,12 +416,14 @@ if __name__ == '__main__':
     parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_CLS14_hand_wand_0_92_241112.pth', help='model.pt path(s)')
         
     parser.add_argument('--source', type=str, default='./data/test/', help='source folder when run from folder')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
+    parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     
-    parser.add_argument('--save_img', type=int, default=2, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
+    parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
+    parser.add_argument('--img_result_pub', type=bool, default=True, help='Detected result publish ROS')
+    
     parser.add_argument('--project', default='runs/wand_gist', help='save results to project/name')
     parser.add_argument('--name', default='ros_result', help='save results to project/name')
     parser.add_argument('--names', default='runs/detect', help='save results tnvidia-oject/name')
