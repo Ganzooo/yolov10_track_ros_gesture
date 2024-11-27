@@ -66,7 +66,7 @@ class ObjectDetectionNode:
         
         self.img_result_pub = True
         if self.img_result_pub == True:
-            self.image_pub = rospy.Publisher("/camera/image_detected/image", Image, queue_size=10)
+            self.image_pub = rospy.Publisher("/camera/image_detected/image", Image, queue_size=1)
             
           
     def image_callback(self, msg):
@@ -408,7 +408,7 @@ if __name__ == '__main__':
     parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_CLS14_hand_wand_0_92_241112.pth', help='model.pt path(s)')
         
     parser.add_argument('--source', type=str, default='./data/test/', help='source folder when run from folder')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
+    parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
