@@ -1,58 +1,63 @@
 
 
-# About this Project 
-This project is for detect and recognize emergency case of traffic. It detects traffic police and emergency cars, then it recognize the traffic police action and classify the emergency car types. It include 14 differenty type of traffic police action and 4 types of emergency cars. Architecture of emergency case handle project.
-![screenshot](images/architecture_tp_ec_rec.png)
+# Emergency Traffic Detection System
+A computer vision system that detects and recognizes emergency traffic situations, including:
+- Traffic police actions (14 different types)
+- Emergency vehicles (4 categories)
 
-## Dependencies & Installation
+![Architecture](images/architecture_tp_ec_rec.png)
 
-Please refer to the following simple steps for installation.
+## Installation
 
-```
+### Prerequisites
+- Ubuntu 20.04
+- ROS Noetic
+- Python 3.x
+
+### Quick Start
+```bash
 git clone https://github.com/Ganzooo/yolov10_track_ros_gesture
 cd yolov10_track_ros_gesture
 pip install -r requirements.txt
 ```
+### ROS Setup
+- Install ROS Noetic following the official ROS installation guide [ROS official web](https://wiki.ros.org/ROS/Installation). (I recommend use this guide to install [ROS two line install](https://wiki.ros.org/ROS/Installation/TwoLineInstall/)). Ensure rospy for Python 3 is installed.
 
-Also our project requires ros core packadges and rospy for python3. In this project we use ros noetic packadge at Ubuntu 20.04. You can install ros noetic from official web [ROS official web](https://wiki.ros.org/ROS/Installation). There have a two line installation guide, I recommend use this guide to install [ROS two line install](https://wiki.ros.org/ROS/Installation/TwoLineInstall/).
-
-## Prepare Test data & Weights
+## Dataset & Model Weights
 
 ### Download Test Dataset
-Traffic Police sample test rosbag from Drive [TP sample](https://drive.google.com/drive/folders/13V_duk5NtFBkXatJbkML-rNMW4fhzFcK?usp=sharing)
+- Traffic Police sample test rosbag from Drive [TP sample](https://drive.google.com/drive/folders/13V_duk5NtFBkXatJbkML-rNMW4fhzFcK?usp=sharing)
+- Emergency car sample test rosbag from Drive [EC sample](https://drive.google.com/drive/folders/1GKGXR9vwLHc8Lbuaw9SRQOyYqpM578df?usp=drive_link)
 
-Emergency car sample test rosbag from Drive [EC sample](https://drive.google.com/drive/folders/1GKGXR9vwLHc8Lbuaw9SRQOyYqpM578df?usp=drive_link)
+### Model Weights
+- Model weights can be downloaded from Drive [Weights](https://drive.google.com/drive/folders/1GKGXR9vwLHc8Lbuaw9SRQOyYqpM578df?usp=drive_link). 
+- Place weight files in ./data/weight/ directory.
 
-Model weights can be downloaded from Drive [Weights](https://drive.google.com/drive/folders/1GKGXR9vwLHc8Lbuaw9SRQOyYqpM578df?usp=drive_link). 
-Copy all weight folder to ./data/weight/ folder.
+## Running the System 
 
-### Run rosbag file and visualization
-You need to open several seperated terminals. 
-
-Terminal 1 (run roscore):
+### Launch ROS Core
 ```
 roscore
 ```
 
-Terminal 2 (play rosbag):
+### Play Test Data
 ```
 cd /rosbag_path/
 rosbag play -i name_of_rosbag.bag
 ```
-
-Terminal 3 (rviz for visualization):
+### Launch Visualization
 ```
 rviz
 ```
 
-## Testing
+### Run Detection System
 You can run it at command line.
 
 ```
 python ./united_trafficpolice_emergency_case_datection.py
 ```
 
-## Check Result
+## Results
 RVIZ test result.
 Traffic plolice action recognition result(Top: Input rosbag, Bottom: Detected and Recognized rosbag)
 ![screenshot](images/Action_rec_result.png)
