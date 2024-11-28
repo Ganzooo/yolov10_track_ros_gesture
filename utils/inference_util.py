@@ -164,16 +164,16 @@ def plot_tracked_tp_at_img(names, tracked_TP, actionTP, img, im0s, colors, cls_n
         action_labels = ['No_signal_hand','Right_to_Left', 'Left_to_Right', 'Front_Stop', 'Rear_Stop','Left_and_Right_Stop', 'Front_and_Rear_Stop','Go', 'Turn_left', 'Turn_right', 'Stop_front','Stop_side', 'No_signal', 'Slow']
 
     label = f'{names[int(tracked_TP[-1][:,-3])]}:{str(int(tracked_TP[-1][:,-2]))}' + '\n' + 'Action: ' + f'{action_labels[actionTP[0]]}'
-    
+
     _scaled_bbox_xyxy = scale_boxes(img.shape[2:], torch.from_numpy(tracked_TP[-1][:,:4].astype('float32')), im0s.shape).round()
     plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_TP[-1][:,-3])], line_thickness=5)
-    
+
 def plot_tracked_ec_at_img(names, tracked_EC, img, im0s, colors):
     for i in range(len(tracked_EC)):
         label = f'{names[int(tracked_EC[i][:,-3])]}:{str(int(tracked_EC[i][:,-2]))}'
         _scaled_bbox_xyxy = scale_boxes(img.shape[2:], torch.from_numpy(tracked_EC[i][:,:4].astype('float32')), im0s.shape).round()
         plot_one_box_tracked(_scaled_bbox_xyxy, im0s, label=label, color=colors[int(tracked_EC[i][:,-3])], line_thickness=5)
-        
+
 def plot_all_boxes_at_img(pred, img, im0s, names, colors):
     try:
         pred[:, :4] = scale_boxes(img.shape[2:], pred[:, :4], im0s.shape).round()
@@ -188,19 +188,19 @@ def plot_all_boxes_at_img(pred, img, im0s, names, colors):
                 #label = f'{names[int(cls)]} + conf:{conf}'
             label = f'{names[int(cls)]}'
             _bbox_xyxy = xyxy[0]
-            
+
             plot_one_box(_bbox_xyxy, im0s, label=label, color=colors[int(cls)], line_thickness=5)
-                
+
 def save_bbox(tracked_bbox, tracked_keypointDebug, save_dir, opt):
     nC = 0
-    
+
     _path = str(save_dir / str(nC))  # img.jpg
-    
+
     for _idx, boxImg in enumerate(tracked_bbox):
         fname = str(_idx) + '.jpg'
-        
+
         create_directory_if_not_exists(_path)
-                                        
+
         save_path = str(save_dir / str(nC) / fname)
         #boxImgCpu = boxImg.squeeze(0).permute(1,2,0).cpu().numpy()*255
         
@@ -210,7 +210,6 @@ def save_bbox(tracked_bbox, tracked_keypointDebug, save_dir, opt):
         else: 
             boxImgCpu = boxImg.squeeze(0).permute(1,2,0).cpu().numpy()*255
             cv2.imwrite(save_path, cv2.cvtColor(boxImgCpu.astype(np.uint8), cv2.COLOR_RGB2BGR))
-        
     nC = nC + 1
         
 def load_classes(path):
