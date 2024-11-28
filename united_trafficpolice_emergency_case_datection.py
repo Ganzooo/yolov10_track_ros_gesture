@@ -15,9 +15,10 @@ from pathlib import Path
 
 import torch
 from torchvision.models.detection import keypointrcnn_resnet50_fpn, KeypointRCNN_ResNet50_FPN_Weights
+import torchvision.transforms as T
 
 from utils.general import apply_classifier, increment_path
-from utils.torch_utils import select_device
+from utils.torch_utils import select_device, time_synchronized
 from utils.augmentations import letterbox
 from utils.inference_util import *
 
@@ -59,6 +60,13 @@ class ObjectDetectionNode:
         self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in self.names]
         self.colors[8] = (255,0,255)
         
+        if opt.img_size == 960:
+            self.resizeT = T.Resize((544, 960))
+        elif opt.img_size == 1280:
+            self.resizeT = T.Resize((736, 1280))
+        else: 
+            self.resizeT = T.Resize((384, 640))
+        
         #ROS settings
         self.bridge = CvBridge()
         
@@ -88,24 +96,29 @@ class ObjectDetectionNode:
             im0s = cv2.cvtColor(im0s, cv2.COLOR_BGR2RGB)
             
             # Padded resize
-            im0s_padd = letterbox(im0s, self.opt.img_size, stride=32)[0]
+            #im0s_padd = letterbox(im0s, self.opt.img_size, stride=32)[0]
 
-            if im0s_padd.size != 0:
+            if im0s.size != 0:
                 # Preprocess Image
-                _img = torch.from_numpy(im0s_padd).to(self.device)
+                #_img = torch.from_numpy(im0s_padd).to(self.device)
+                img = self.resizeT(torch.from_numpy(im0s).to(self.device).permute(2,0,1)) / 255.0
                 
-                img = _img / 255.0  # 0 - 255 to 0.0 - 1.0
-                img = img.permute(2,0,1)
+                #img = _img / 255.0  # 0 - 255 to 0.0 - 1.0
+                #img = img.permute(2,0,1)
                 if img.ndimension() == 3:
                     img = img.unsqueeze(0)
                 
+                #t_det0 = time_synchronized()
                 pred = self.handle_detection(img)
-                                
+                t_det1 = time_synchronized()         
+                
                 # Apply Classifier
                 if self.opt.classifyEC:
                     if len(pred):
                         pred = apply_classifier(pred, self.modelEC, img, im0s, self.names, self.device)
-
+                
+                t_class1 = time_synchronized()
+                
                 if self.opt.trackTP: ### Tracker only perform Traffic Police class
                     if len(pred):
                         outputs = self.handle_tracking(self.tracker, pred, self.names, im0s, img, self.opt)
@@ -158,6 +171,8 @@ class ObjectDetectionNode:
                                 self.tracked_TP_bbox = []
                                 self.tracked_EC = []
                     
+                    t_track_and_buff1 = time_synchronized()
+                    
                     if len(self.tracked_TP) >= self.opt.num_frame_action_rec and self.opt.actionRec:
                         print('Tracked length:', len(self.tracked_TP))
                         
@@ -209,6 +224,7 @@ class ObjectDetectionNode:
                     if self.opt.save_img >= 2 and len(pred):
                         plot_all_boxes_at_img(pred, img, im0s, self.names, self.colors)
                         
+                t_ac_rec1 = time_synchronized()
                 
                 if self.img_result_pub == True:
                     # Convert OpenCV image back to ROS Image message
@@ -221,13 +237,24 @@ class ObjectDetectionNode:
                     # Save the processed image with bounding boxes
                     save_path = os.path.join(self.save_dir, str(self.nC)+'.jpg')
                     self.save_image(save_path, im0s)       
-                    
-            #print(f'Done. ({time.time() - t0:.3f}s)')  
+                
+                t_save1 = time_synchronized()
+            
+            print(f'Done. All elapsed time:({time.time() - t0:.3f}s)\n \
+                  \t Detect time: ({t_det1 - t0:.3f}s)\n \
+                  \t Class time: ({t_class1 - t_det1:.3f}s)\n \
+                  \t Track time: ({t_track_and_buff1 - t_class1:.3f}s)\n \
+                  \t Action rec time: ({t_ac_rec1 - t_track_and_buff1:.3f}s)\n \
+                  \t Save time: ({t_save1 - t_ac_rec1:.3f}s)\n')  
+            
             rospy.loginfo(f'Done. ({time.time() - t0:.3f}s)')  
     
     def load_models(self, opt):
         ### 1. Load detection model 
         model = YOLOv10(opt.weights, verbose=True)
+        model.to(self.device)
+        model.fuse()
+        #
         
         # Get names and colors
         names = model.names
@@ -265,8 +292,8 @@ class ObjectDetectionNode:
             modelRecTP.to(self.device)
             modelRecTP.eval()
             
-            if opt.half:
-                modelRecTP.half()
+            #if opt.half:
+            #    modelRecTP.half()
         else: 
             modelRecTP = None
         
@@ -276,8 +303,8 @@ class ObjectDetectionNode:
             modelKPD.eval()
             modelKPD.to(self.device)
             
-            if opt.half:
-                modelKPD.half()
+            #if opt.half:
+            #    modelKPD.half()
         else: 
             modelKPD = None
             
@@ -290,8 +317,8 @@ class ObjectDetectionNode:
             modelEC.load_state_dict(checkpointEC)
             modelEC.eval()
             
-            if opt.half:
-                modelEC.half()
+            #if opt.half:
+            #    modelEC.half()
             
             names[9], names[10], names[11], names[12] = 'Police_Car','Fire_Truck','Ambulance','Fire_Other'
             colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
@@ -300,8 +327,11 @@ class ObjectDetectionNode:
         return model, tracker, modelRecTP, modelKPD, modelEC, colors, names, det_cls_number
             
     def handle_detection(self, img):
-        
+
+        if self.opt.half:
+            img = img.half()
         results = self.model(img, conf = self.opt.conf_thres)
+        #results = results.half()
 
         # Convert the detections to the required format: N X (x, y, x, y, conf, cls)
         pred = []
@@ -416,19 +446,19 @@ if __name__ == '__main__':
     parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_CLS14_hand_wand_0_92_241112.pth', help='model.pt path(s)')
         
     parser.add_argument('--source', type=str, default='./data/test/', help='source folder when run from folder')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
+    parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels) (1280, 960, 640)')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     
-    parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
-    parser.add_argument('--img_result_pub', type=bool, default=True, help='Detected result publish ROS')
+    parser.add_argument('--save_img', type=int, default=0, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
+    parser.add_argument('--img_result_pub', type=bool, default=False, help='Detected result publish ROS')
     
     parser.add_argument('--project', default='runs/wand_gist', help='save results to project/name')
     parser.add_argument('--name', default='ros_result', help='save results to project/name')
     parser.add_argument('--names', default='runs/detect', help='save results tnvidia-oject/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--half', type=bool, default=False, help='model run half: True/False (Not fully tested yet)')
+    parser.add_argument('--half', type=bool, default=True, help='model run half: True/False (Not fully tested yet)')
     
     parser.add_argument('--send_result_server', type=bool, default=True, help='Send result to SERVER by RestAPI')
     parser.add_argument('--classifyEC', type=bool, default=True, help='Classification Emergency Car model: True/False')
