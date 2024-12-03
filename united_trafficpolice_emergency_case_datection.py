@@ -483,7 +483,7 @@ if __name__ == '__main__':
     parser.add_argument('--acr-class', type=int, default=15, help='Action class number, Wand: 7, Hand: 7')
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
     parser.add_argument('--keyPointDet', type=bool, default=False, help='Key Point Detection model: True/False')
-    parser.add_argument('--bTH', type=int, default=10, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
+    parser.add_argument('--bTH', type=int, default=0, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
     parser.add_argument('--action-img-size', type=int, default=224, help='action recognization inference size (pixels)')
     parser.add_argument('--tpTRACK_ID', type=int, default=1, help='traffic police track id DEFAULT:1 -> it is update from tracker')
     parser.add_argument('--ec-class', type=int, default=5, help='Emergency classigy class number: Police_Car,Fire_Truck,Ambulance,Fire_Other')
