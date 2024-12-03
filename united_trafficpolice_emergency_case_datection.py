@@ -81,7 +81,7 @@ class ObjectDetectionNode:
         self.nC = self.nC + 1
         
         # Discard every 2(second) frame from ROS data
-        if self.nC % 2 == 0:
+        if self.nC % self.opt.tp_recog_sampling == 0:
             self.YOLO_detection = True 
         else: 
             self.YOLO_detection = False 
@@ -456,7 +456,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_tp241120_0_90.pt', help='model.pt path(s)')
     #parser.add_argument('--weights', nargs='+', type=str, default='./yolo11l.engine', help='model.pt path(s)')
     parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241107_Class4.pt', help='model.pt path(s)')
-    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/241130_ResNetAttentionVisual_lr0.0005_nf_30_s_2_0.949.pth', help='model.pt path(s)')
+    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/241203_ResNetAttentionVisual_lr0.0005_nf_30_s_2_0.981.pth', help='model.pt path(s)')
         
     parser.add_argument('--source', type=str, default='./data/test/', help='source folder when run from folder')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels) (1280, 960, 640)')
@@ -478,6 +478,7 @@ if __name__ == '__main__':
     parser.add_argument('--trackTP', type=bool, default=True, help='Track traffic police: True/False')
     parser.add_argument('--actionRec', type=bool, default=True, help='Action Recognization model: True/False')
     
+    parser.add_argument('--tp_recog_sampling', type=int, default=2, help='TP recognition sampling, 1: Runs every frame, 2: Runs every 2 nd frame')
     parser.add_argument('--num_frame_action_rec', type=int, default=30, help='Num of frames for action recognization')
     parser.add_argument('--acr-class', type=int, default=15, help='Action class number, Wand: 7, Hand: 7')
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
