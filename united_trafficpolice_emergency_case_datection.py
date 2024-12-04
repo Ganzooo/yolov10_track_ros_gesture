@@ -27,7 +27,7 @@ from torchvision.models import resnet34
 from torchvision import transforms
 
 from boxmot import StrongSORT, BoTSORT
-from ultralytics import YOLOv10
+from ultralytics import YOLO
 
 #Server RESTApi
 import requests
@@ -81,7 +81,7 @@ class ObjectDetectionNode:
         self.nC = self.nC + 1
         
         # Discard every 2(second) frame from ROS data
-        if self.nC % 1 == 0:
+        if self.nC % 2 == 0:
             self.YOLO_detection = True 
         else: 
             self.YOLO_detection = False 
@@ -94,7 +94,7 @@ class ObjectDetectionNode:
             np_arr = np.frombuffer(msg.data, np.uint8)  # Decode from byte array
             im0s = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)  # Decode to OpenCV format
             im0s = cv2.cvtColor(im0s, cv2.COLOR_BGR2RGB)
-            
+
             # Padded resize
             #im0s_padd = letterbox(im0s, self.opt.img_size, stride=32)[0]
 
@@ -122,6 +122,8 @@ class ObjectDetectionNode:
                 if self.opt.trackTP: ### Tracker only perform Traffic Police class
                     if len(pred):
                         outputs = self.handle_tracking(self.tracker, pred, self.names, im0s, img, self.opt)
+                        
+                        t_track1 = time_synchronized()
                         
                         if len(outputs) > 0:
                             for output in outputs:
@@ -171,7 +173,7 @@ class ObjectDetectionNode:
                                 self.tracked_TP_bbox = []
                                 self.tracked_EC = []
                     
-                    t_track_and_buff1 = time_synchronized()
+                    t_buff1 = time_synchronized()
                     
                     if len(self.tracked_TP) >= self.opt.num_frame_action_rec and self.opt.actionRec:
                         print('Tracked length:', len(self.tracked_TP))
@@ -243,21 +245,25 @@ class ObjectDetectionNode:
             print(f'Done. All elapsed time:({time.time() - t0:.3f}s)\n \
                   \t Detect time: ({t_det1 - t0:.3f}s)\n \
                   \t Class time: ({t_class1 - t_det1:.3f}s)\n \
-                  \t Track time: ({t_track_and_buff1 - t_class1:.3f}s)\n \
-                  \t Action rec time: ({t_ac_rec1 - t_track_and_buff1:.3f}s)\n \
+                  \t Track time: ({t_track1 - t_class1:.3f}s)\n \
+                  \t Buff time: ({t_buff1 - t_track1:.3f}s)\n \
+                  \t Action rec time: ({t_ac_rec1 - t_buff1:.3f}s)\n \
                   \t Save time: ({t_save1 - t_ac_rec1:.3f}s)\n')  
             
             rospy.loginfo(f'Done. ({time.time() - t0:.3f}s)')  
     
     def load_models(self, opt):
         ### 1. Load detection model 
-        model = YOLOv10(opt.weights, verbose=True)
-        model.to(self.device)
-        model.fuse()
+        model = YOLO(opt.weights)
+        #model = YOLOv10(opt.weights, verbose=True)
+        #model.to(self.device)
+        #model.fuse()
+        
         #
         
         # Get names and colors
-        names = model.names
+        #names = model.names
+        names = ["Person", "Bike", "Car", "Bus", "Truck", "Traffic Sign", "Traffic Light", "Emergency_Car",  "Traffic_Police"]
         det_cls_number = len(names)
         if det_cls_number == 8:
             names = ["Person", "Bike", "Car", "Bus", "Truck", "Traffic Sign", "Traffic Light", "Emergency_Car",  "Traffic_Police"]
@@ -276,7 +282,7 @@ class ObjectDetectionNode:
                 #model_weights = Path('./data/weight/tracker/osnet_x1_0_msmt17.pt'),  # which ReID model to use
                 model_weights = Path('./data/weight/tracker/osnet_x0_25_msmt17.pt'),  # which ReID model to use
                 device = 'cuda:0',
-                fp16 = False,
+                fp16 = True,
             )
         else: 
             tracker = None
@@ -320,7 +326,9 @@ class ObjectDetectionNode:
             #if opt.half:
             #    modelEC.half()
             
-            names[9], names[10], names[11], names[12] = 'Police_Car','Fire_Truck','Ambulance','Fire_Other'
+            #names[9], names[10], names[11], names[12] = 'Police_Car','Fire_Truck','Ambulance','Fire_Other'
+            names.append('Police_Car')
+            
             colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
         else: 
             modelEC = None
@@ -330,6 +338,8 @@ class ObjectDetectionNode:
 
         if self.opt.half:
             img = img.half()
+        
+        #results = self.model(img, conf = self.opt.conf_thres)
         results = self.model(img, conf = self.opt.conf_thres)
         #results = results.half()
 
@@ -441,9 +451,10 @@ def convert_data_json_format(data, data_type, pred_type):
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_tp241120_0_90.pt', help='model.pt path(s)')
+    #parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_tp241120_0_90.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov11l_keti_tp_ec_0_916_241204.pt', help='model.pt path(s)')
     parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241107_Class4.pt', help='model.pt path(s)')
-    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/modeltype_ResNetAttentionVisual_CLS14_hand_wand_0_92_241112.pth', help='model.pt path(s)')
+    parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/241203_ResNetAttentionVisual_lr0.0005_nf_30_s_2_0.981.pth', help='model.pt path(s)')
         
     parser.add_argument('--source', type=str, default='./data/test/', help='source folder when run from folder')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels) (1280, 960, 640)')
@@ -451,25 +462,25 @@ if __name__ == '__main__':
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
     parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     
-    parser.add_argument('--save_img', type=int, default=0, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
-    parser.add_argument('--img_result_pub', type=bool, default=False, help='Detected result publish ROS')
+    parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
+    parser.add_argument('--img_result_pub', type=bool, default=True, help='Detected result publish ROS')
     
     parser.add_argument('--project', default='runs/wand_gist', help='save results to project/name')
     parser.add_argument('--name', default='ros_result', help='save results to project/name')
     parser.add_argument('--names', default='runs/detect', help='save results tnvidia-oject/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-    parser.add_argument('--half', type=bool, default=True, help='model run half: True/False (Not fully tested yet)')
+    parser.add_argument('--half', type=bool, default=False, help='model run half: True/False (Not fully tested yet)')
     
     parser.add_argument('--send_result_server', type=bool, default=True, help='Send result to SERVER by RestAPI')
     parser.add_argument('--classifyEC', type=bool, default=True, help='Classification Emergency Car model: True/False')
     parser.add_argument('--trackTP', type=bool, default=True, help='Track traffic police: True/False')
     parser.add_argument('--actionRec', type=bool, default=True, help='Action Recognization model: True/False')
     
-    parser.add_argument('--num_frame_action_rec', type=int, default=60, help='Num of frames for action recognization')
+    parser.add_argument('--num_frame_action_rec', type=int, default=30, help='Num of frames for action recognization')
     parser.add_argument('--acr-class', type=int, default=15, help='Action class number, Wand: 7, Hand: 7')
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
     parser.add_argument('--keyPointDet', type=bool, default=False, help='Key Point Detection model: True/False')
-    parser.add_argument('--bTH', type=int, default=10, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
+    parser.add_argument('--bTH', type=int, default=0, help='extend boundary box with threshold(add/sub thr val from bbox x1,x2,y1,y2): 0, 30, 50')
     parser.add_argument('--action-img-size', type=int, default=224, help='action recognization inference size (pixels)')
     parser.add_argument('--tpTRACK_ID', type=int, default=1, help='traffic police track id DEFAULT:1 -> it is update from tracker')
     parser.add_argument('--ec-class', type=int, default=5, help='Emergency classigy class number: Police_Car,Fire_Truck,Ambulance,Fire_Other')

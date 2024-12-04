@@ -26,6 +26,7 @@ Usage - formats:
                               yolov8n.tflite             # TensorFlow Lite
                               yolov8n_edgetpu.tflite     # TensorFlow Edge TPU
                               yolov8n_paddle_model       # PaddlePaddle
+                              yolov8n.mnn                # MNN
                               yolov8n_ncnn_model         # NCNN
 """
 
@@ -152,7 +153,11 @@ class BasePredictor:
             (list): A list of transformed images.
         """
         same_shapes = len({x.shape for x in im}) == 1
-        letterbox = LetterBox(self.imgsz, auto=same_shapes and self.model.pt, stride=self.model.stride)
+        letterbox = LetterBox(
+            self.imgsz,
+            auto=same_shapes and (self.model.pt or getattr(self.model, "dynamic", False)),
+            stride=self.model.stride,
+        )
         return [letterbox(image=x) for x in im]
 
     def postprocess(self, preds, img, orig_imgs):
@@ -169,12 +174,18 @@ class BasePredictor:
 
     def predict_cli(self, source=None, model=None):
         """
-        Method used for CLI prediction.
+        Method used for Command Line Interface (CLI) prediction.
 
-        It uses always generator as outputs as not required by CLI mode.
+        This function is designed to run predictions using the CLI. It sets up the source and model, then processes
+        the inputs in a streaming manner. This method ensures that no outputs accumulate in memory by consuming the
+        generator without storing results.
+
+        Note:
+            Do not modify this function or remove the generator. The generator ensures that no outputs are
+            accumulated in memory, which is critical for preventing memory issues during long-running predictions.
         """
         gen = self.stream_inference(source, model)
-        for _ in gen:  # noqa, running CLI inference without accumulating any outputs (do not modify)
+        for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
             pass
 
     def setup_source(self, source):
@@ -319,13 +330,13 @@ class BasePredictor:
             frame = self.dataset.count
         else:
             match = re.search(r"frame (\d+)/", s[i])
-            frame = int(match.group(1)) if match else None  # 0 if frame undetermined
+            frame = int(match[1]) if match else None  # 0 if frame undetermined
 
         self.txt_path = self.save_dir / "labels" / (p.stem + ("" if self.dataset.mode == "image" else f"_{frame}"))
-        string += "%gx%g " % im.shape[2:]
+        string += "{:g}x{:g} ".format(*im.shape[2:])
         result = self.results[i]
         result.save_dir = self.save_dir.__str__()  # used in other locations
-        string += result.verbose() + f"{result.speed['inference']:.1f}ms"
+        string += f"{result.verbose()}{result.speed['inference']:.1f}ms"
 
         # Add predictions to image
         if self.args.save or self.args.show:
@@ -345,7 +356,7 @@ class BasePredictor:
         if self.args.show:
             self.show(str(p))
         if self.args.save:
-            self.save_predicted_images(str(self.save_dir / (p.name or "tmp.jpg")), frame)
+            self.save_predicted_images(str(self.save_dir / p.name), frame)
 
         return string
 
@@ -375,10 +386,10 @@ class BasePredictor:
 
         # Save images
         else:
-            cv2.imwrite(save_path, im)
+            cv2.imwrite(str(Path(save_path).with_suffix(".jpg")), im)  # save to JPG for best support
 
     def show(self, p=""):
-        """Display an image in a window using OpenCV imshow()."""
+        """Display an image in a window using the OpenCV imshow function."""
         im = self.plotted_img
         if platform.system() == "Linux" and p not in self.windows:
             self.windows.append(p)

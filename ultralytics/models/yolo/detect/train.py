@@ -24,7 +24,7 @@ class DetectionTrainer(BaseTrainer):
         ```python
         from ultralytics.models.yolo.detect import DetectionTrainer
 
-        args = dict(model='yolov8n.pt', data='coco8.yaml', epochs=3)
+        args = dict(model="yolo11n.pt", data="coco8.yaml", epochs=3)
         trainer = DetectionTrainer(overrides=args)
         trainer.train()
         ```
@@ -44,7 +44,7 @@ class DetectionTrainer(BaseTrainer):
 
     def get_dataloader(self, dataset_path, batch_size=16, rank=0, mode="train"):
         """Construct and return dataloader."""
-        assert mode in ["train", "val"]
+        assert mode in {"train", "val"}, f"Mode must be 'train' or 'val', not {mode}."
         with torch_distributed_zero_first(rank):  # init dataset *.cache only once if DDP
             dataset = self.build_dataset(dataset_path, mode, batch_size)
         shuffle = mode == "train"
@@ -60,7 +60,7 @@ class DetectionTrainer(BaseTrainer):
         if self.args.multi_scale:
             imgs = batch["img"]
             sz = (
-                random.randrange(self.args.imgsz * 0.5, self.args.imgsz * 1.5 + self.stride)
+                random.randrange(int(self.args.imgsz * 0.5), int(self.args.imgsz * 1.5 + self.stride))
                 // self.stride
                 * self.stride
             )  # size
@@ -141,3 +141,10 @@ class DetectionTrainer(BaseTrainer):
         boxes = np.concatenate([lb["bboxes"] for lb in self.train_loader.dataset.labels], 0)
         cls = np.concatenate([lb["cls"] for lb in self.train_loader.dataset.labels], 0)
         plot_labels(boxes, cls.squeeze(), names=self.data["names"], save_dir=self.save_dir, on_plot=self.on_plot)
+
+    def auto_batch(self):
+        """Get batch size by calculating memory occupation of model."""
+        train_dataset = self.build_dataset(self.trainset, mode="train", batch=16)
+        # 4 for mosaic augmentation
+        max_num_obj = max(len(label["cls"]) for label in train_dataset.labels) * 4
+        return super().auto_batch(max_num_obj)
