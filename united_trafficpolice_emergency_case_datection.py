@@ -70,7 +70,7 @@ class ObjectDetectionNode:
         #ROS settings
         self.bridge = CvBridge()
         
-        self.image_sub = rospy.Subscriber(name = "/camera/image_raw/compressed", data_class = CompressedImage, callback = self.image_callback, queue_size=10)
+        self.image_sub = rospy.Subscriber(name = "/camera/image_raw/compressed", data_class = CompressedImage, callback = self.image_callback, queue_size=1)
         
         self.img_result_pub = opt.img_result_pub
         if self.img_result_pub == True:
@@ -81,7 +81,8 @@ class ObjectDetectionNode:
         self.nC = self.nC + 1
         
         # Discard every 2(second) frame from ROS data
-        if self.nC % self.opt.tp_recog_sampling == 0:
+        #if self.nC % self.opt.tp_recog_sampling == 0:
+        if self.nC == 1:
             self.YOLO_detection = True 
         else: 
             self.YOLO_detection = False 
@@ -122,7 +123,8 @@ class ObjectDetectionNode:
                     img = img.unsqueeze(0)
                 
                 #t_det0 = time_synchronized()
-                pred = self.handle_detection(img)
+                with torch.no_grad():
+                    pred = self.handle_detection(img)
                 t_det1 = time_synchronized()         
                 
                 # Apply Classifier
@@ -239,6 +241,8 @@ class ObjectDetectionNode:
                     if self.opt.save_img >= 2 and len(pred):
                         plot_all_boxes_at_img(pred, img, im0s, self.names, self.colors)
                         
+                    
+                        
                 t_ac_rec1 = time_synchronized()
                 
                 if self.img_result_pub == True:
@@ -255,22 +259,23 @@ class ObjectDetectionNode:
                 
                 t_save1 = time_synchronized()
             
-            print(f'Done. All elapsed time:({time.time() - t0:.3f}s)\n \
-                  \t Detect time: ({t_det1 - t0:.3f}s)\n \
-                  \t Class time: ({t_class1 - t_det1:.3f}s)\n \
-                  \t Track time: ({t_track1 - t_class1:.3f}s)\n \
-                  \t Buff time: ({t_buff1 - t_track1:.3f}s)\n \
-                  \t Action rec time: ({t_ac_rec1 - t_buff1:.3f}s)\n \
-                  \t Save time: ({t_save1 - t_ac_rec1:.3f}s)\n')  
+            #print(f'Done. All elapsed time:({time.time() - t0:.3f}s)\n \
+            #      \t Detect time: ({t_det1 - t0:.3f}s)\n \
+            #      \t Class time: ({t_class1 - t_det1:.3f}s)\n \
+            #      \t Track time: ({t_track1 - t_class1:.3f}s)\n \
+            #      \t Buff time: ({t_buff1 - t_track1:.3f}s)\n \
+            #      \t Action rec time: ({t_ac_rec1 - t_buff1:.3f}s)\n \
+            #      \t Save time: ({t_save1 - t_ac_rec1:.3f}s)\n')  
             
             rospy.loginfo(f'Done. ({time.time() - t0:.3f}s)')  
     
     def load_models(self, opt):
         ### 1. Load detection model 
-        model = YOLO(opt.weights)
-        #model = YOLOv10(opt.weights, verbose=True)
-        #model.to(self.device)
-        #model.fuse()
+        #model = YOLO(opt.weights)
+        model = YOLOv10(opt.weights, verbose=True)
+        model.to(self.device)
+        model.fuse()
+        
         
         #
         
@@ -355,7 +360,7 @@ class ObjectDetectionNode:
         if self.opt.half:
             img = img.half()
 
-        results = self.model(img, conf = self.opt.conf_thres)
+        results = self.model.predict(img, conf = self.opt.conf_thres)
         #results = results.half()
 
         # Convert the detections to the required format: N X (x, y, x, y, conf, cls)
@@ -491,7 +496,7 @@ if __name__ == '__main__':
     parser.add_argument('--trackTP', type=bool, default=True, help='Track traffic police: True/False')
     parser.add_argument('--actionRec', type=bool, default=True, help='Action Recognization model: True/False')
     
-    parser.add_argument('--tp_recog_sampling', type=int, default=2, help='TP recognition sampling, 1: Runs every frame, 2: Runs every 2 nd frame')
+    parser.add_argument('--tp_recog_sampling', type=int, default=1000, help='TP recognition sampling, 1: Runs every frame, 2: Runs every 2 nd frame')
     parser.add_argument('--num_frame_action_rec', type=int, default=30, help='Num of frames for action recognization')
     parser.add_argument('--acr-class', type=int, default=15, help='Action class number, Wand: 7, Hand: 7')
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
