@@ -102,7 +102,20 @@ class ObjectDetectionNode:
                 # Preprocess Image
                 #_img = torch.from_numpy(im0s_padd).to(self.device)
                 img = self.resizeT(torch.from_numpy(im0s).to(self.device).permute(2,0,1)) / 255.0
-                
+
+                Debug = True
+                if Debug:     
+                    output_path = './test/{}.jpg'.format(self.nC)
+                    # Convert back to numpy for saving
+                    img_np = (img.cpu().numpy() * 255).astype(np.uint8)
+                    img_np = np.transpose(img_np, (1, 2, 0))
+                    
+                    # Convert RGB back to BGR for saving
+                    img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+                    
+                    # Save the image
+                    cv2.imwrite(output_path, img_np)
+        
                 #img = _img / 255.0  # 0 - 255 to 0.0 - 1.0
                 #img = img.permute(2,0,1)
                 if img.ndimension() == 3:
