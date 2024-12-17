@@ -70,7 +70,7 @@ class ObjectDetectionNode:
         #ROS settings
         self.bridge = CvBridge()
         
-        self.image_sub = rospy.Subscriber(name = "/camera/image_raw/compressed", data_class = CompressedImage, callback = self.image_callback, queue_size=1)
+        self.image_sub = rospy.Subscriber(name = "/camera/image_raw/compressed", data_class = CompressedImage, callback = self.image_callback, queue_size=30)
         
         self.img_result_pub = opt.img_result_pub
         if self.img_result_pub == True:
@@ -81,8 +81,7 @@ class ObjectDetectionNode:
         self.nC = self.nC + 1
         
         # Discard every 2(second) frame from ROS data
-        #if self.nC % self.opt.tp_recog_sampling == 0:
-        if self.nC == 1:
+        if self.nC % self.opt.tp_recog_sampling == 0:
             self.YOLO_detection = True 
         else: 
             self.YOLO_detection = False 
@@ -104,18 +103,18 @@ class ObjectDetectionNode:
                 #_img = torch.from_numpy(im0s_padd).to(self.device)
                 img = self.resizeT(torch.from_numpy(im0s).to(self.device).permute(2,0,1)) / 255.0
 
-                Debug = True
-                if Debug:     
-                    output_path = './test/{}.jpg'.format(self.nC)
-                    # Convert back to numpy for saving
-                    img_np = (img.cpu().numpy() * 255).astype(np.uint8)
-                    img_np = np.transpose(img_np, (1, 2, 0))
+                # Debug = False
+                # if Debug:     
+                #     output_path = './test/{}.jpg'.format(self.nC)
+                #     # Convert back to numpy for saving
+                #     img_np = (img.cpu().numpy() * 255).astype(np.uint8)
+                #     img_np = np.transpose(img_np, (1, 2, 0))
                     
-                    # Convert RGB back to BGR for saving
-                    img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+                #     # Convert RGB back to BGR for saving
+                #     img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
                     
-                    # Save the image
-                    cv2.imwrite(output_path, img_np)
+                #     # Save the image
+                #     cv2.imwrite(output_path, img_np)
         
                 #img = _img / 255.0  # 0 - 255 to 0.0 - 1.0
                 #img = img.permute(2,0,1)
@@ -190,8 +189,10 @@ class ObjectDetectionNode:
                     
                     t_buff1 = time_synchronized()
                     
-                    if len(self.tracked_TP) >= self.opt.num_frame_action_rec and self.opt.actionRec:
+                    if len(self.tracked_TP) == self.opt.num_frame_action_rec and self.opt.actionRec:
                         print('Tracked length:', len(self.tracked_TP))
+                        _boxImg = []
+                        x = []
                         
                         _boxImg = torch.cat(self.tracked_TP_bbox, axis=0).unsqueeze(0)
                         
@@ -203,8 +204,11 @@ class ObjectDetectionNode:
                                 x = [_boxImg, _keyPoint]
                             else: 
                                 x = _boxImg
-                            actionTP = self.modelRecTP(x, label=None)
-                            actionTP = torch.argmax(actionTP, dim=-1).cpu().numpy()
+                            try:
+                                actionTP = self.modelRecTP(x, label=None)
+                                actionTP = torch.argmax(actionTP, dim=-1).cpu().numpy()
+                            except:
+                                print('not enough buff')
                         
                         if self.opt.save_img >= 1:
                             plot_tracked_tp_at_img(self.names, self.tracked_TP, actionTP, img, im0s, self.colors, opt.acr_class)
@@ -248,6 +252,7 @@ class ObjectDetectionNode:
                 if self.img_result_pub == True:
                     # Convert OpenCV image back to ROS Image message
                     _img = cv2.cvtColor(im0s, cv2.COLOR_RGB2BGR)
+                   
                     detected_img_msg = self.bridge.cv2_to_imgmsg(_img)
                     # Publish the annotated image
                     self.image_pub.publish(detected_img_msg)
@@ -273,6 +278,7 @@ class ObjectDetectionNode:
         ### 1. Load detection model 
         #model = YOLO(opt.weights)
         model = YOLOv10(opt.weights, verbose=True)
+        
         model.to(self.device)
         model.fuse()
         
@@ -472,14 +478,15 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='./data/weight/detection/yolov10b_keti_tp241120_0_90.pt', help='model.pt path(s)')
-    #parser.add_argument('--weights', nargs='+', type=str, default='./yolo11l.engine', help='model.pt path(s)')
     parser.add_argument('--ec-weights', nargs='+', type=str, default='./data/weight/classification/resnet34_EC_CL_20241107_Class4.pt', help='model.pt path(s)')
     parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/241203_ResNetAttentionVisual_lr0.0005_nf_30_s_2_0.981.pth', help='model.pt path(s)')
-        
+    #parser.add_argument('--acr-weights', nargs='+', type=str, default='./data/weight/action_rec/241203_KIAPI_ResNetAttentionVisual_lr0.0005_nf_60_s_1_0.992.pth', help='model.pt path(s)')
+
     parser.add_argument('--source', type=str, default='./data/test/', help='source folder when run from folder')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels) (1280, 960, 640)')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='IOU threshold for NMS')
+    
     parser.add_argument('--device', default='cuda:0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     
     parser.add_argument('--save_img', type=int, default=1, help='save image level 0: no save, 1: save result EC, TP only on img, 2: save all bbox on img')
@@ -496,7 +503,7 @@ if __name__ == '__main__':
     parser.add_argument('--trackTP', type=bool, default=True, help='Track traffic police: True/False')
     parser.add_argument('--actionRec', type=bool, default=True, help='Action Recognization model: True/False')
     
-    parser.add_argument('--tp_recog_sampling', type=int, default=1000, help='TP recognition sampling, 1: Runs every frame, 2: Runs every 2 nd frame')
+    parser.add_argument('--tp_recog_sampling', type=int, default=2, help='TP recognition sampling, 1: Runs every frame, 2: Runs every 2 nd frame')
     parser.add_argument('--num_frame_action_rec', type=int, default=30, help='Num of frames for action recognization')
     parser.add_argument('--acr-class', type=int, default=15, help='Action class number, Wand: 7, Hand: 7')
     parser.add_argument('--tpClassNumber', type=int, default=8, help='Traffic Police Class number of Detection')
